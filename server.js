@@ -10,7 +10,7 @@ const client = redis.createClient({
   port: process.env.REDIS_PORT
 });
 
-const rateLimitScript = fs.readFileSync(path.join(__dirname, 'rate_lmiter.lua'), 'utf-8');
+const rateLimitScript = fs.readFileSync(path.join(__dirname, 'rate_limiter.lua'), 'utf-8');
 
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT);
 const TIME_WINDOW = parseInt(process.env.TIME_WINDOW);
@@ -33,7 +33,7 @@ async function rateLimiter(req, res, next) {
 
 app.use(rateLimiter);
 
-app, get('/', (req, res) => {
+app.get('/', (req, res) => {
   res.send('Welcome to the Rate Limiter API!');
 });
 
