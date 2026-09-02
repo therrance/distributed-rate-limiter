@@ -7,7 +7,7 @@ if current and tonumber(current) >= limit then
     return 0
 else
     if current then
-        redis.call("inct", key)
+        redis.call("incr", key)
     else
         redis.call("set", key, 1, "EX", window)
     end

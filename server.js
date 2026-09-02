@@ -6,8 +6,10 @@ const path = require('path');
 
 const app = express();
 const client = redis.createClient({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT
+  socket: {
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: parseInt(process.env.REDIS_PORT, 10) || 6379
+  }
 });
 client.on('error', (err) => console.error('Redis client error:', err));
 
@@ -20,7 +22,10 @@ const TIME_WINDOW = parseInt(process.env.TIME_WINDOW);
 async function rateLimiter(req, res, next) {
   const ip = req.ip;
   try {
-    const allowed = await client.eval(rateLimitScript, 1, ip, RATE_LIMIT, TIME_WINDOW);
+    const allowed = await client.eval(rateLimitScript, {
+      keys: [ip],
+      arguments: [String(RATE_LIMIT), String(TIME_WINDOW)]
+    });
     if (allowed === 1) {
       console.log(`Request allowed from ${ip}`);
       next();
