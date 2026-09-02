@@ -22,8 +22,10 @@ async function rateLimiter(req, res, next) {
   try {
     const allowed = await client.eval(rateLimitScript, 1, ip, RATE_LIMIT, TIME_WINDOW);
     if (allowed === 1) {
+      console.log(`Request allowed from ${ip}`);
       next();
     } else {
+      console.log(`Request denied from ${ip}`);
       res.status(429).json({ message: 'Too many requests. Please try again later' });
     }
   } catch (err) {
