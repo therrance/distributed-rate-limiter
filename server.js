@@ -18,19 +18,30 @@ const rateLimitScript = fs.readFileSync(path.join(__dirname, 'rate_limiter.lua')
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT);
 const TIME_WINDOW = parseInt(process.env.TIME_WINDOW);
 
-// Middleware for rate limiting
+const USER_RATE_LIMIT = parseInt(process.env.USER_RATE_LIMIT) || RATE_LIMIT;
+const USER_TIME_WINDOW = parseInt(process.env.USER_TIME_WINDOW) || TIME_WINDOW;
+
+const USER_ID_HEADER = 'X-User-Id';
+
+// Middleware for rate limiting.
+// Limits requests by IP by default, but requests carrying an X-User-Id header are limited per user.
 async function rateLimiter(req, res, next) {
-  const ip = req.ip;
+  const userId = req.header(USER_ID_HEADER);
+  const scope = userId ? 'user' : 'ip';
+  const identifier = userId || req.ip;
+  const limit = scope === 'user' ? USER_RATE_LIMIT : RATE_LIMIT;
+  const windowSeconds = scope === 'user' ? USER_TIME_WINDOW : TIME_WINDOW;
+  const key = `rate:limit:${scope}:${identifier}`;
   try {
     const allowed = await client.eval(rateLimitScript, {
-      keys: [ip],
-      arguments: [String(RATE_LIMIT), String(TIME_WINDOW)]
+      keys: [key],
+      arguments: [String(limit), String(windowSeconds)]
     });
     if (allowed === 1) {
-      console.log(`Request allowed from ${ip}`);
+      console.log(`Request allowed for ${scope} ${identifier}`);
       next();
     } else {
-      console.log(`Request denied from ${ip}`);
+      console.log(`Request denied for ${scope} ${identifier}`);
       res.status(429).json({ message: 'Too many requests. Please try again later' });
     }
   } catch (err) {
@@ -46,8 +57,13 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT;
-client.connect().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server runnig on port ${PORT}`);
+
+if (require.main === module) {
+  client.connect().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server runnig on port ${PORT}`);
+    });
   });
-});
+}
+
+module.exports = { app, client, rateLimiter, USER_ID_HEADER };

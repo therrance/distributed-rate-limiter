@@ -21,6 +21,8 @@ services:
       REDIS_PORT: 6379
       RATE_LIMIT: ${RATE_LIMIT:-10}
       TIME_WINDOW: ${TIME_WINDOW:-60}
+      USER_RATE_LIMIT: ${USER_RATE_LIMIT:-10}
+      USER_TIME_WINDOW: ${USER_TIME_WINDOW:-60}
       PORT: 3000
     depends_on:
       redis:
