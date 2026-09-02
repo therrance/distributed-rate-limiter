@@ -9,6 +9,7 @@ const client = redis.createClient({
   host: process.env.REDIS_HOST,
   port: process.env.REDIS_PORT
 });
+client.on('error', (err) => console.error('Redis client error:', err));
 
 const rateLimitScript = fs.readFileSync(path.join(__dirname, 'rate_limiter.lua'), 'utf-8');
 
@@ -38,6 +39,8 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT;
-app.listen(PORT, () => {
-  console.log(`Server runnig on port ${PORT}`);
+client.connect().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server runnig on port ${PORT}`);
+  });
 });
