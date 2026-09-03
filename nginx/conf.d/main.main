@@ -1,0 +1,19 @@
+# docker-openresty's stock nginx.conf includes /etc/nginx/conf.d/*.main from
+# the main context -- the only place `env` is legal.
+
+worker_processes auto;
+
+# nginx strips the worker environment except for vars declared here.
+# rate_limit.lua reads these once in init_by_lua (master, pre-fork), but
+# declaring them keeps os.getenv correct in every phase.
+env REDIS_HOST;
+env REDIS_PORT;
+env RATE_LIMIT;
+env TIME_WINDOW;
+env USER_RATE_LIMIT;
+env USER_TIME_WINDOW;
+env RATE_LIMIT_FAIL_OPEN;
+
+# logs/error.log -> /dev/stderr in this image. notice is needed for our
+# per-request allow/deny lines (ngx.NOTICE); nginx core stays quiet at it.
+error_log logs/error.log notice;

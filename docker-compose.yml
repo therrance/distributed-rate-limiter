@@ -1,8 +1,10 @@
 services:
   redis:
     image: redis:7-alpine
+    # Loopback-only: keeps redis-cli usable from the host without exposing an
+    # unauthenticated Redis to the LAN.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     command: ["redis-server", "--appendonly", "yes"]
@@ -14,8 +16,23 @@ services:
 
   app:
     build: .
+    # No published port: nginx is the only entry point. Reachable in-network
+    # as http://app:3000.
+    environment:
+      PORT: 3000
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  nginx:
+    image: openresty/openresty:1.25.3.2-alpine
     ports:
-      - "3000:3000"
+      - "${NGINX_PORT:-8080}:8080"
+    # Rate-limit config lives here, not on `app`: the edge is the only
+    # enforcement point.
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -23,9 +40,23 @@ services:
       TIME_WINDOW: ${TIME_WINDOW:-60}
       USER_RATE_LIMIT: ${USER_RATE_LIMIT:-10}
       USER_TIME_WINDOW: ${USER_TIME_WINDOW:-60}
-      PORT: 3000
+      RATE_LIMIT_FAIL_OPEN: ${RATE_LIMIT_FAIL_OPEN:-false}
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/lua:/etc/nginx/lua:ro
+      # Mounted outside /etc/nginx/lua: it's Redis-side Lua run via
+      # red:eval(), not a requireable OpenResty module.
+      - ./rate_limiter.lua:/etc/nginx/redis/rate_limiter.lua:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/nginx-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     depends_on:
       redis:
+        condition: service_healthy
+      app:
         condition: service_healthy
 
 volumes:

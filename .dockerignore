@@ -1,0 +1,22 @@
+# Dependencies are installed in the image by `npm ci`, never copied.
+node_modules
+
+# VCS and local tooling
+.git
+.gitignore
+.dockerignore
+
+# Local secrets/config: the container gets its env from docker-compose.yml.
+.env
+.env.*
+!.env.example
+
+# Logs, including the stray nginx-error.log -> /dev/stderr symlink at the root.
+*.log
+logs
+npm-debug.log*
+
+# Infrastructure: belongs to the nginx/redis containers, not the app image.
+Dockerfile
+docker-compose.yml
+nginx
