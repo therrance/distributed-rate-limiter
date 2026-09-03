@@ -24,12 +24,12 @@ local DENY_BODY  = '{"message":"Too many requests. Please try again later"}'
 local ERROR_BODY = '{"message":"Internal server error"}'
 local JSON_TYPE  = "application/json; charset=utf-8"
 
-local CONNECT_TIMEOUT_MS = 200
-local SEND_TIMEOUT_MS    = 200
-local READ_TIMEOUT_MS    = 200
-
-local KEEPALIVE_IDLE_MS  = 30000
-local KEEPALIVE_POOL     = 64
+-- Defaults for the Redis socket tunables; overridable via the env vars read
+-- in _M.init(). Total connections to Redis is roughly
+-- replicas * worker_processes * pool_size, which matters against maxclients.
+local DEFAULT_TIMEOUT_MS        = 200
+local DEFAULT_KEEPALIVE_IDLE_MS = 30000
+local DEFAULT_KEEPALIVE_POOL    = 64
 
 -- Populated by _M.init() in the master process; inherited by every worker.
 local conf = {}
@@ -79,6 +79,13 @@ function _M.init()
     conf.redis_port = env_num("REDIS_PORT") or 6379
     conf.fail_open  = os_getenv("RATE_LIMIT_FAIL_OPEN") == "true"
 
+    conf.timeout_ms        = env_num("REDIS_TIMEOUT_MS")
+                             or DEFAULT_TIMEOUT_MS
+    conf.keepalive_idle_ms = env_num("REDIS_KEEPALIVE_IDLE_MS")
+                             or DEFAULT_KEEPALIVE_IDLE_MS
+    conf.keepalive_pool    = env_num("REDIS_KEEPALIVE_POOL_SIZE")
+                             or DEFAULT_KEEPALIVE_POOL
+
     conf.rules = {
         ip   = { limit = tostring(ip_limit),   window = tostring(ip_window)   },
         user = { limit = tostring(user_limit), window = tostring(user_window) },
@@ -88,6 +95,7 @@ function _M.init()
             conf.redis_port, " ip=", ip_limit, "/", ip_window,
             "s user=", user_limit, "/", user_window,
             "s fail_open=", tostring(conf.fail_open),
+            " timeout=", conf.timeout_ms, "ms pool=", conf.keepalive_pool,
             " script=", SCRIPT_PATH, " (", #script, " bytes)")
 end
 
@@ -134,7 +142,7 @@ function _M.run()
     if not red then
         return on_redis_failure(scope, identifier, "new(): " .. tostring(nerr))
     end
-    red:set_timeouts(CONNECT_TIMEOUT_MS, SEND_TIMEOUT_MS, READ_TIMEOUT_MS)
+    red:set_timeouts(conf.timeout_ms, conf.timeout_ms, conf.timeout_ms)
 
     local ok, cerr = red:connect(conf.redis_host, conf.redis_port)
     if not ok then
@@ -152,7 +160,8 @@ function _M.run()
 
     -- Pool it instead of close()ing: a fresh handshake per request would
     -- roughly double the latency this check adds.
-    local kok, kerr = red:set_keepalive(KEEPALIVE_IDLE_MS, KEEPALIVE_POOL)
+    local kok, kerr = red:set_keepalive(conf.keepalive_idle_ms,
+                                       conf.keepalive_pool)
     if not kok then
         ngx.log(ngx.WARN, "rate_limit: set_keepalive failed: ", tostring(kerr))
     end

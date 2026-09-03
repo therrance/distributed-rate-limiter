@@ -1,0 +1,34 @@
+{{ .Chart.Name }} deployed as {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Topology:
+  edge  x{{ .Values.edge.replicaCount }}  OpenResty, enforces the limit before proxying
+  app   x{{ .Values.app.replicaCount }}  Node backend, does not rate limit
+{{- if .Values.redis.enabled }}
+  redis x1  shared fixed-window counter (single primary)
+{{- else }}
+  redis     external at {{ .Values.redis.external.host }}:{{ .Values.redis.external.port }}
+{{- end }}
+
+Limits: {{ .Values.rateLimit.limit }}/{{ .Values.rateLimit.window }}s per IP,
+        {{ .Values.rateLimit.userLimit }}/{{ .Values.rateLimit.userWindow }}s per X-User-Id
+        fail{{ if .Values.rateLimit.failOpen }}-open{{ else }}-closed{{ end }} on a Redis outage
+
+Reach it:
+{{- if .Values.ingress.enabled }}
+  http://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "rate-limiter.fullname" . }}-edge 8080:{{ .Values.edge.service.port }}
+  curl -i http://127.0.0.1:8080/
+{{- end }}
+
+Confirm the limit is shared across all {{ .Values.edge.replicaCount }} edge pods (this is the
+point of a Redis-backed limiter -- the cap is global, not per pod):
+  for i in $(seq 1 {{ add .Values.rateLimit.limit 2 }}); do curl -s -o /dev/null -w "%{http_code} " http://127.0.0.1:8080/; done
+
+{{- if and (not .Values.edge.realIp.enabled) (or .Values.ingress.enabled (ne (toString .Values.edge.service.type) "ClusterIP")) }}
+
+WARNING: edge.realIp.enabled is false while traffic arrives through a proxy or
+LoadBalancer, so remote_addr is the proxy's address and every anonymous client
+shares ONE IP bucket. Set edge.realIp.enabled=true with
+edge.realIp.trustedCIDRs, or use edge.service.externalTrafficPolicy=Local.
+{{- end }}

@@ -1,0 +1,33 @@
+{{- if .Values.edge.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "rate-limiter.fullname" . }}-edge
+  labels:
+    {{- include "rate-limiter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  minAvailable: {{ .Values.edge.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "rate-limiter.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: edge
+{{- end }}
+{{- if .Values.app.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "rate-limiter.fullname" . }}-app
+  labels:
+    {{- include "rate-limiter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  minAvailable: {{ .Values.app.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "rate-limiter.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: app
+{{- end }}

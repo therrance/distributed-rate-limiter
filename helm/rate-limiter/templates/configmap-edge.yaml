@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rate-limiter.fullname" . }}-edge
+  labels:
+    {{- include "rate-limiter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+data:
+  # Shared verbatim with the compose setup (files/ is the single source of truth).
+  main.main: |
+{{ .Files.Get "files/conf.d/main.main" | indent 4 }}
+  default.conf: |
+{{ .Files.Get "files/conf.d/default.conf" | indent 4 }}
+  rate_limit.lua: |
+{{ .Files.Get "files/lua/rate_limit.lua" | indent 4 }}
+  rate_limiter.lua: |
+{{ .Files.Get "files/redis/rate_limiter.lua" | indent 4 }}
+
+  # Environment-specific, rendered from values rather than shared.
+  tuning.main: |
+    worker_processes {{ .Values.edge.workerProcesses }};
+  upstream.inc: |
+    # ClusterIP is stable for the Service's lifetime, so nginx caching the
+    # resolution at start-up is safe. Recreating the Service changes the IP
+    # and requires an edge restart.
+    upstream app_backend {
+        server {{ include "rate-limiter.appHost" . }}:{{ .Values.app.port }};
+        keepalive 32;
+    }
+{{- if .Values.edge.realIp.enabled }}
+  realip.conf: |
+    # Restores per-client IP buckets behind a proxy. Only CIDRs listed here
+    # are trusted to set {{ .Values.edge.realIp.header }}.
+    {{- range .Values.edge.realIp.trustedCIDRs }}
+    set_real_ip_from {{ . }};
+    {{- end }}
+    real_ip_header {{ .Values.edge.realIp.header }};
+    real_ip_recursive {{ ternary "on" "off" .Values.edge.realIp.recursive }};
+{{- end }}

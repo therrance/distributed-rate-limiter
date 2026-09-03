@@ -1,0 +1,125 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Used to build fully-qualified Service names. The edge must address Redis by
+# FQDN: nginx's resolver does not apply /etc/resolv.conf search domains.
+clusterDomain: cluster.local
+
+# Consumed by the edge only -- the Node backend does not rate limit.
+rateLimit:
+  # Anonymous requests, bucketed per client IP.
+  limit: 10
+  window: 60
+  # Requests carrying an X-User-Id header, bucketed per user id.
+  userLimit: 10
+  userWindow: 60
+  # false: reject with 500 when Redis is unreachable. true: allow through,
+  # trading enforcement for availability during a Redis outage.
+  failOpen: false
+
+edge:
+  replicaCount: 3
+  image:
+    repository: openresty/openresty
+    tag: 1.25.3.2-alpine
+    pullPolicy: IfNotPresent
+  # Pinned rather than `auto`: nginx's auto is not cgroup-aware and would
+  # spawn one worker per node core regardless of the pod's CPU limit.
+  workerProcesses: 2
+  # How long a terminating edge pod keeps serving before draining, so
+  # Endpoints removal reaches every kube-proxy first. Too low and a rolling
+  # update drops the odd request. Must stay below terminationGracePeriod.
+  drainDelaySeconds: 10
+  redis:
+    timeoutMs: 200
+    keepaliveIdleMs: 30000
+    # Connections to Redis land near
+    # replicaCount * workerProcesses * keepalivePoolSize; keep that under
+    # Redis maxclients (default 10000).
+    keepalivePoolSize: 32
+  service:
+    type: ClusterIP
+    port: 80
+    # With type LoadBalancer/NodePort, set to Local to preserve the client
+    # source IP. Otherwise kube-proxy SNATs and every anonymous client shares
+    # one IP bucket.
+    externalTrafficPolicy: ""
+  # Behind an ingress or LB, remote_addr is the proxy's address, so all
+  # anonymous traffic collapses into a single bucket. Enabling this restores
+  # per-client IP buckets -- but only trust the header from CIDRs you
+  # control, or callers can forge their own bucket.
+  realIp:
+    enabled: false
+    header: X-Forwarded-For
+    recursive: true
+    trustedCIDRs: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+app:
+  replicaCount: 3
+  image:
+    repository: distributed-rate-limiter-app
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+redis:
+  # The shared counter store, and the one stateful component. A single
+  # primary: the stateless tiers above are horizontally scalable and highly
+  # available, while Redis recovers by pod reschedule. Point `external` at a
+  # managed/HA Redis for real failover.
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  port: 6379
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Used when redis.enabled is false.
+  external:
+    host: ""
+    port: 6379
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: rate-limiter.local
+  path: /
+  pathType: Prefix
+
+serviceAccount:
+  create: true
+  name: ""
+
+nodeSelector: {}
+tolerations: []

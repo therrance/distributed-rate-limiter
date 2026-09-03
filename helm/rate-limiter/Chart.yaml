@@ -1,0 +1,8 @@
+apiVersion: v2
+name: rate-limiter
+description: >-
+  Distributed rate limiter: an OpenResty edge enforcing Redis-backed
+  fixed-window limits in front of a Node backend.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

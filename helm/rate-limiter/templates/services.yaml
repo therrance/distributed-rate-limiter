@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rate-limiter.fullname" . }}-edge
+  labels:
+    {{- include "rate-limiter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  type: {{ .Values.edge.service.type }}
+  {{- if and .Values.edge.service.externalTrafficPolicy (ne (toString .Values.edge.service.type) "ClusterIP") }}
+  externalTrafficPolicy: {{ .Values.edge.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.edge.service.port }}
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: {{ include "rate-limiter.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: edge
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rate-limiter.fullname" . }}-app
+  labels:
+    {{- include "rate-limiter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  # Not headless on purpose: nginx resolves upstream names once at start-up,
+  # so a stable ClusterIP is what keeps proxy_pass valid as app pods churn.
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.app.port }}
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: {{ include "rate-limiter.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: app

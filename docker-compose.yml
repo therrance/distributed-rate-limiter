@@ -41,12 +41,15 @@ services:
       USER_RATE_LIMIT: ${USER_RATE_LIMIT:-10}
       USER_TIME_WINDOW: ${USER_TIME_WINDOW:-60}
       RATE_LIMIT_FAIL_OPEN: ${RATE_LIMIT_FAIL_OPEN:-false}
+    # Mounted from the Helm chart's files/ dir, which is the single source of
+    # truth for the edge config -- Helm's .Files.Get cannot read outside the
+    # chart, so sharing beats keeping a second copy in sync.
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/lua:/etc/nginx/lua:ro
-      # Mounted outside /etc/nginx/lua: it's Redis-side Lua run via
-      # red:eval(), not a requireable OpenResty module.
-      - ./rate_limiter.lua:/etc/nginx/redis/rate_limiter.lua:ro
+      - ./helm/rate-limiter/files/conf.d:/etc/nginx/conf.d:ro
+      - ./helm/rate-limiter/files/lua:/etc/nginx/lua:ro
+      # Outside /etc/nginx/lua: Redis-side Lua run via red:eval(), not a
+      # requireable OpenResty module.
+      - ./helm/rate-limiter/files/redis:/etc/nginx/redis:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/nginx-health"]
       interval: 5s

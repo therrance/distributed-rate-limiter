@@ -1,7 +1,10 @@
 # docker-openresty's stock nginx.conf includes /etc/nginx/conf.d/*.main from
 # the main context -- the only place `env` is legal.
-
-worker_processes auto;
+#
+# worker_processes is deliberately NOT set here: it differs per environment
+# (the Helm chart renders tuning.main from values; compose takes nginx's
+# default of 1). `auto` is not cgroup-aware, so in a CPU-limited pod it would
+# spawn one worker per node core.
 
 # nginx strips the worker environment except for vars declared here.
 # rate_limit.lua reads these once in init_by_lua (master, pre-fork), but
@@ -13,6 +16,9 @@ env TIME_WINDOW;
 env USER_RATE_LIMIT;
 env USER_TIME_WINDOW;
 env RATE_LIMIT_FAIL_OPEN;
+env REDIS_TIMEOUT_MS;
+env REDIS_KEEPALIVE_IDLE_MS;
+env REDIS_KEEPALIVE_POOL_SIZE;
 
 # logs/error.log -> /dev/stderr in this image. notice is needed for our
 # per-request allow/deny lines (ngx.NOTICE); nginx core stays quiet at it.
